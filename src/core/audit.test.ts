@@ -10,8 +10,8 @@ describe('audit pipeline', () => {
       expect(JSON.parse(JSON.stringify(audit))).toEqual(audit);
       expect(audit.summary.capsOk).toBe(true);
       expect(audit.summary.findings).toBe(audit.findings.length);
-      expect(audit.summary.rulesRun).toBe(2);
-      expect(audit.coverage.skippedRules).toHaveLength(4);
+      expect(audit.summary.rulesRun).toBe(6);
+      expect(audit.coverage.skippedRules).toHaveLength(0);
       expect(audit.findings.every((f) => f.explanation.checker.ok)).toBe(true);
     }
   });

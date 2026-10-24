@@ -1,12 +1,14 @@
 // Rule registry (PLAN §6): all six ids with constant tier/severity from RULE_META.
-// FORMULA_DRIFT, CONSTANT_PLUG, SUM_RANGE_SHORT and MIXED_UNITS are implemented in M3; until
-// then they are registered with `implemented: false`, return [] and are reported in
-// coverage.skippedRules, so a summary never implies they ran. M3 replaces each stub's `apply`
-// with its module's function and flips `implemented`.
+// All six core rules are implemented. Unimplemented/custom rules are still reported as
+// skipped, so the audit summary never implies that a detector ran when it did not.
 
 import type { SkippedRule, WorkbookModel } from '../sheetmodel/types.ts';
 import { applyBrokenRef } from './brokenRef.ts';
 import { applyErrorValue } from './errorValue.ts';
+import { applyFormulaDrift } from './formulaDrift.ts';
+import { applyConstantPlug } from './constantPlug.ts';
+import { applySumRangeShort } from './sumRangeShort.ts';
+import { applyMixedUnits } from './mixedUnits.ts';
 import { RULE_IDS, RULE_META, type Finding, type RuleContext, type RuleDefinition, type RuleId } from './types.ts';
 
 type Apply = RuleDefinition['apply'];
@@ -14,6 +16,10 @@ type Apply = RuleDefinition['apply'];
 const IMPLEMENTATIONS: Partial<Record<RuleId, Apply>> = {
   ERROR_VALUE: applyErrorValue,
   BROKEN_REF: applyBrokenRef,
+  FORMULA_DRIFT: applyFormulaDrift,
+  CONSTANT_PLUG: applyConstantPlug,
+  SUM_RANGE_SHORT: applySumRangeShort,
+  MIXED_UNITS: applyMixedUnits,
 };
 
 const notYet: Apply = () => [];

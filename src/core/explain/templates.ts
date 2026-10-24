@@ -8,10 +8,10 @@
 // Invariant (tested over every fixture): every template passes the citation checker. If one
 // ever fails, the explanation is reported unavailable instead of shown.
 //
-// M3 plugs its four rules in by replacing their TEMPLATES entries (today: genericTemplate).
+// M3 templates cite only neighbours inside the bounded rule-axis window.
 
 import { checkExplanation, type CheckFailure, type CheckResult, type ExplanationCandidate } from '../cited/checker.ts';
-import { evidenceKeys, type Evidence, type EvidencePlan } from '../evidence/bundle.ts';
+import { evidenceKeys, MAX_NEIGHBOURS_PER_SIDE, type Axis, type Evidence, type EvidencePlan } from '../evidence/bundle.ts';
 import { RULE_META, type Finding, type RuleId } from '../rules/types.ts';
 import { parseA1, splitCellRef, toA1, toCellRef, type CellRef } from '../util/addr.ts';
 
@@ -34,12 +34,12 @@ export function proseRef(ref: CellRef, findingSheet: string): string {
   return p.sheet === findingSheet ? toA1(p.row, p.col) : ref;
 }
 
-function stringFact(f: Finding, key: string): string | undefined {
+function stringFact(f: Pick<Finding, 'facts'>, key: string): string | undefined {
   const v = f.facts[key];
   return typeof v === 'string' ? v : undefined;
 }
 
-function numberFact(f: Finding, key: string): number | undefined {
+function numberFact(f: Pick<Finding, 'facts'>, key: string): number | undefined {
   const v = f.facts[key];
   return typeof v === 'number' ? v : undefined;
 }
@@ -119,13 +119,100 @@ export function genericTemplate(ruleId: RuleId): Template {
   };
 }
 
+function factAxis(finding: Finding): Axis { return finding.facts.axis === 'row' ? 'row' : 'column'; }
+
+/** Required template refs obey the same axis/window as optional neighbours. */
+function windowPlan(finding: Finding, refs: readonly string[]): EvidencePlan {
+  const axis = factAxis(finding);
+  const self = parseA1(finding.cell);
+  const required = refs.filter((ref) => {
+    const p = splitCellRef(ref);
+    if (!p || !self || p.sheet !== finding.sheet) return false;
+    return axis === 'column' ? p.col === self.col && Math.abs(p.row - self.row) <= MAX_NEIGHBOURS_PER_SIDE
+      : p.row === self.row && Math.abs(p.col - self.col) <= MAX_NEIGHBOURS_PER_SIDE;
+  });
+  return { axis, required: [...new Set(required)] };
+}
+
+function factRefs(finding: Finding, names: readonly string[]): string[] {
+  return names.flatMap((name) => {
+    const value = finding.facts[name];
+    return typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+  });
+}
+
+function patternTemplate(ruleId: 'FORMULA_DRIFT' | 'CONSTANT_PLUG'): Template {
+  return {
+    ruleId,
+    plan: (finding) => windowPlan(finding, factRefs(finding, ['neighbour_before', 'neighbour_after'])),
+    render(finding, evidence) {
+      const self = flaggedRef(finding);
+      const a = proseRef(self, finding.sheet);
+      const keys = new Set(evidenceKeys(evidence));
+      const before = stringFact(evidence, 'neighbour_before');
+      const after = stringFact(evidence, 'neighbour_after');
+      const neighbours = before !== undefined && after !== undefined && keys.has(before) && keys.has(after) ? [before, after] : [];
+      const pattern = neighbours.length ? `the matching formulas in ${neighbours.map((r) => proseRef(r, finding.sheet)).join(' and ')}` : 'the matching formulas around it';
+      return {
+        explanation: ruleId === 'FORMULA_DRIFT' ? `${a} differs from ${pattern}; check whether the copied formula pattern was intended.`
+          : `${a} is a numeric constant between ${pattern}; check whether it should follow the copied formula pattern.`,
+        cited_cells: [self, ...neighbours],
+      };
+    },
+  };
+}
+
+const sumRangeTemplate: Template = {
+  ruleId: 'SUM_RANGE_SHORT',
+  // The original range start is intentionally absent, even when it happens to fit.
+  plan: (finding) => windowPlan(finding, factRefs(finding, ['range_ends_at', 'data_continues_to'])),
+  render(finding, evidence) {
+    const self = flaggedRef(finding);
+    const keys = new Set(evidenceKeys(evidence));
+    const end = stringFact(evidence, 'range_ends_at');
+    const continues = stringFact(evidence, 'data_continues_to');
+    const count = numberFact(evidence, 'rows_omitted');
+    const cited_cells = [self];
+    let explanation = `${proseRef(self, finding.sheet)} sums a range that stops short`;
+    if (end !== undefined && keys.has(end)) {
+      explanation = `${proseRef(self, finding.sheet)} sums a range ending at ${proseRef(end, finding.sheet)}`;
+      cited_cells.push(end);
+    }
+    if (continues !== undefined && keys.has(continues)) {
+      explanation += `, but numeric data continues through ${proseRef(continues, finding.sheet)}`;
+      cited_cells.push(continues);
+    }
+    if (count !== undefined) explanation += `; ${count} ${finding.facts.axis === 'row' ? 'columns' : 'rows'} are omitted`;
+    return { explanation: `${explanation}.`, cited_cells: [...new Set(cited_cells)] };
+  },
+};
+
+const CLASS_LABEL: Readonly<Record<string, string>> = { percent: 'percent-formatted', fraction: 'fraction-scale', whole: 'whole-number' };
+const mixedUnitsTemplate: Template = {
+  ruleId: 'MIXED_UNITS',
+  plan: (finding) => windowPlan(finding, factRefs(finding, ['header_cell', 'reference_cells'])),
+  render(finding, evidence) {
+    const self = flaggedRef(finding);
+    const a = proseRef(self, finding.sheet);
+    const category = stringFact(evidence, 'class_name');
+    const majority = stringFact(evidence, 'majority_class');
+    if (evidence.facts.unit_case === 'percent-column' && category && majority) {
+      const also = Array.isArray(evidence.facts.addition_unit_tokens) ? ' Its formula also combines inputs with differing header units.' : '';
+      return { explanation: `${a} has a ${CLASS_LABEL[category] ?? 'different-scale'} value in a column dominated by ${CLASS_LABEL[majority] ?? 'another-scale'} values; check the intended percentage scale.${also}`, cited_cells: [self] };
+    }
+    const tokens = evidence.facts.unit_tokens;
+    const units = Array.isArray(tokens) ? tokens.join(', ') : '';
+    return { explanation: `${a} combines inputs whose header units differ${units ? `: ${units}` : ''}; convert them to matching units before adding or subtracting.`, cited_cells: [self] };
+  },
+};
+
 export const TEMPLATES: Readonly<Record<RuleId, Template>> = Object.freeze({
   ERROR_VALUE: errorValueTemplate,
   BROKEN_REF: brokenRefTemplate,
-  FORMULA_DRIFT: genericTemplate('FORMULA_DRIFT'),
-  CONSTANT_PLUG: genericTemplate('CONSTANT_PLUG'),
-  SUM_RANGE_SHORT: genericTemplate('SUM_RANGE_SHORT'),
-  MIXED_UNITS: genericTemplate('MIXED_UNITS'),
+  FORMULA_DRIFT: patternTemplate('FORMULA_DRIFT'),
+  CONSTANT_PLUG: patternTemplate('CONSTANT_PLUG'),
+  SUM_RANGE_SHORT: sumRangeTemplate,
+  MIXED_UNITS: mixedUnitsTemplate,
 });
 
 export function templateFor(ruleId: RuleId): Template {

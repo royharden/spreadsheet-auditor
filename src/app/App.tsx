@@ -7,10 +7,15 @@ import { Upload } from './components/Upload.tsx';
 import { Summary } from './components/Summary.tsx';
 import { FindingsTable } from './components/FindingsTable.tsx';
 import './styles.css';
+import { buildBudgetQ3 } from '../../generator/samples.ts';
 
 export const createAuditWorker = (): Worker => new Worker(new URL('../worker/parse.worker.ts', import.meta.url), { type: 'module' });
 
-export function App({ workerFactory = createAuditWorker }: { workerFactory?: () => Worker }) {
+type AuditFile = Pick<File, 'name' | 'size' | 'arrayBuffer'>;
+export function App({ workerFactory = createAuditWorker, sampleBuilder = buildBudgetQ3 }: {
+  workerFactory?: () => Worker;
+  sampleBuilder?: (version: 1 | 2) => Uint8Array;
+}) {
   const [outcome, setOutcome] = useState<AuditOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [persistence, setPersistence] = useState<Persistence | null>(null);
@@ -29,7 +34,7 @@ export function App({ workerFactory = createAuditWorker }: { workerFactory?: () 
     };
   }, []);
 
-  async function audit(file: File): Promise<void> {
+  async function audit(file: AuditFile): Promise<void> {
     const id = ++requestId.current;
     active.current?.terminate();
     active.current = null;
@@ -68,12 +73,26 @@ export function App({ workerFactory = createAuditWorker }: { workerFactory?: () 
     }
   }
 
+  function loadSample(version: 1 | 2): void {
+    try {
+      const generated = sampleBuilder(version);
+      // Copy into an owned ArrayBuffer before transferring it to the worker.
+      const bytes = new Uint8Array(generated.length);
+      bytes.set(generated);
+      void audit({ name: version === 1 ? 'budget-q3.xlsx' : 'budget-q3-v2.xlsx', size: bytes.length, arrayBuffer: () => Promise.resolve(bytes.buffer) });
+    } catch (error) {
+      setOutcome({ ok: false, failure: { message: error instanceof Error ? error.message : 'The sample could not be generated.' } });
+    }
+  }
+
   return (
     <main>
       <h1>Spreadsheet Auditor</h1>
       <p className="banner" role="note">Rulings are stored in this browser only; nothing is uploaded.</p>
       {persistence === 'memory' && <p role="status">Browser storage is unavailable. Rulings will be lost when this page closes.</p>}
       <Upload busy={busy} onFile={(file) => { void audit(file); }} />
+      <p><button type="button" disabled={busy} onClick={() => loadSample(1)}>Load sample</button>{' '}
+        <button type="button" disabled={busy} onClick={() => loadSample(2)}>Load sample v2</button></p>
       {busy && <p role="status">Auditing workbook in this browser…</p>}
       {outcome && !outcome.ok && <p className="error" role="alert">{'refusal' in outcome
         ? `Workbook refused (${outcome.refusal.code}): ${outcome.refusal.message}`

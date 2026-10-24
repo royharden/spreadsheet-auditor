@@ -3,9 +3,10 @@ import { runAudit } from '../audit.ts';
 import { M2_FIXTURES, errorsWorkbook } from '../testFixtures.ts';
 import { checkExplanation } from '../cited/checker.ts';
 import { explainFinding, templateFor } from './templates.ts';
+import { M3_FIXTURES } from '../rules/m3Fixtures.ts';
 
 describe('template-always-passes invariant', () => {
-  for (const fixture of M2_FIXTURES) {
+  for (const fixture of [...M2_FIXTURES, ...M3_FIXTURES]) {
     it(`passes every finding of ${fixture.name}, including template-only evidence`, () => {
       const audit = runAudit(fixture.build(), { fileName: fixture.fileName });
       for (const finding of audit.findings) {

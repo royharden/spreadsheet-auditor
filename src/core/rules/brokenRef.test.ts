@@ -26,10 +26,11 @@ describe('BROKEN_REF and rule registry', () => {
     expect(new Set(found.map((f) => f.id)).size).toBe(2);
   });
 
-  it('registers all six fixed tiers and reports later rules as skipped', () => {
+  it('registers all six implemented rules with their fixed tiers', () => {
     expect(RULES.map((r) => r.id)).toEqual(RULE_IDS);
     for (const r of RULES) expect(r).toMatchObject(RULE_META[r.id]);
     const run = runRules(readWorkbook(cleanWorkbook()));
-    expect(run.skippedRules.map((r) => r.ruleId)).toEqual(['FORMULA_DRIFT', 'CONSTANT_PLUG', 'SUM_RANGE_SHORT', 'MIXED_UNITS']);
+    expect(run.skippedRules).toEqual([]);
+    expect(RULES.every((rule) => rule.implemented)).toBe(true);
   });
 });

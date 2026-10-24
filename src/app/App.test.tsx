@@ -46,7 +46,7 @@ describe('minimal upload journey', () => {
     act(() => worker.reply());
     expect(screen.getByRole('heading', { name: 'Summary: budget.xlsx' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Findings' })).toBeTruthy();
-    expect(screen.getByText(/FORMULA_DRIFT: not implemented/)).toBeTruthy();
+    expect(screen.getByText('None.')).toBeTruthy();
     expect(screen.getAllByText(/Citations verified/).length).toBeGreaterThan(0);
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
@@ -61,6 +61,24 @@ describe('minimal upload journey', () => {
     expect(screen.getByRole('alert').textContent).toContain('unsupported-extension');
     expect(input.disabled).toBe(false);
     expect(input.value).toBe('');
+  });
+
+  it('sends each generated sample version through the same local worker journey', async () => {
+    const workers: FakeWorker[] = [];
+    const sampleBuilder = vi.fn((_version: 1 | 2) => errorsWorkbook());
+    render(<App sampleBuilder={sampleBuilder} workerFactory={() => {
+      const worker = new FakeWorker();
+      workers.push(worker);
+      return worker as unknown as Worker;
+    }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load sample' }));
+    await waitFor(() => expect(workers[0]?.sent?.fileName).toBe('budget-q3.xlsx'));
+    act(() => workers[0].reply());
+    fireEvent.click(screen.getByRole('button', { name: 'Load sample v2' }));
+    await waitFor(() => expect(workers[1]?.sent?.fileName).toBe('budget-q3-v2.xlsx'));
+    act(() => workers[1].reply());
+    expect(sampleBuilder.mock.calls.map(([version]) => version)).toEqual([1, 2]);
+    expect(screen.getByRole('heading', { name: 'Summary: budget-q3-v2.xlsx' })).toBeTruthy();
   });
 
   it('refuses oversized files before allocating their byte buffer or creating a worker', () => {
