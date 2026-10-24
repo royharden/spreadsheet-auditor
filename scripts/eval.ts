@@ -321,7 +321,7 @@ export async function writeReports(root: string, report: EvaluationReport): Prom
   try {
     const path = resolve('README.md');
     const readme = await readFile(path, 'utf8');
-    const block = `<!-- EVAL-RESULTS:BEGIN -->\n${report.jevSentence}\n\n[Recorded evaluation results](results/results.md)\n<!-- EVAL-RESULTS:END -->`;
+    const block = `<!-- EVAL-RESULTS:BEGIN -->\n${renderResults(report)}\n<!-- EVAL-RESULTS:END -->`;
     const pattern = /<!-- EVAL-RESULTS:BEGIN -->[\s\S]*?<!-- EVAL-RESULTS:END -->/;
     await writeFile(path, pattern.test(readme) ? readme.replace(pattern, block) : `${readme.trimEnd()}\n\n${block}\n`);
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }

@@ -1,0 +1,5 @@
+---
+description: Shared Spreadsheet Auditor product instructions
+alwaysApply: true
+---
+Read and follow the repository-root AGENTS.md. Runtime readiness is recorded in README.md and docs/DEFERRED-VALIDATION.md; source construction is not evidence that tests or infrastructure ran.

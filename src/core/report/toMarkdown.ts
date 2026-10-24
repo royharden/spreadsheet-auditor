@@ -9,7 +9,7 @@ function findingLines(finding: ReportFinding, setAside: boolean): string[] {
     lines.push(`Human ruling: ${ruling.decision}; ${ruling.stale ? 'stale: formula changed (decision not applied)' : 'current'}; ${text(ruling.createdAt)}.`, '');
     if (ruling.carriedFrom) lines.push(`Carried from workbook SHA-256: ${ruling.carriedFrom.workbookSha256}.`, '');
     if (ruling.note !== undefined) lines.push(`Device-local note (included only in this export): ${text(ruling.note)}`, '');
-    else if (ruling.hasNote) lines.push('A note exists on the originating device; its text is unavailable here.', '');
+    else if (ruling.hasNote) lines.push('Note text is unavailable here; it may be on the originating device.', '');
   }
   return lines;
 }

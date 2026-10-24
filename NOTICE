@@ -1,0 +1,14 @@
+Spreadsheet Auditor
+Copyright (c) 2026 Roy Harden
+
+Original TypeScript implementation. No third-party repository source was vendored.
+
+Design and evaluation ideas were informed by:
+- petehottelet/spreadsheet-auditor (MIT): deterministic findings, bounded review and planted-defect matching.
+- Keremozdemirra/xlsx-review (MIT): R1C1 neighbour agreement and direct OOXML inspection.
+- BayramAnnakov/excel-hygiene (Apache-2.0): rules-first review and planted spreadsheet mistakes.
+- TypeSafe documentation: typed Choice judgments and confidence-based routing. No cookbook source copied.
+
+These are idea references, not executed competitor benchmarks or endorsements. Installed dependencies retain their own licenses; review their exact versions and notices during activation.
+
+Synthetic workbook source is included under this repository's MIT license. EUSES/Enron derivatives have undocumented or uncertain underlying dataset licenses; SpreadsheetBench has separate share-alike terms. Such corpora are optional local-only research and are not included. GPL/EUPL projects were not vendored or made dependencies.
