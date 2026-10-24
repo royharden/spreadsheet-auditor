@@ -81,10 +81,20 @@ export function isPercentFormat(numFmtId: number, code: string | undefined): boo
   return code !== undefined && scanFormatCode(code).percent;
 }
 
-export function isDateFormat(numFmtId: number, code: string | undefined): boolean {
+/**
+ * Date detection, the single source of truth (the reader's cell formats call it too).
+ * `customCode` says whether `code` comes from the workbook's own <numFmts> (a workbook may
+ * redefine a built-in id; then its own code decides). It defaults to "the id has no fixed
+ * built-in code", which is right for callers that only have an id and a code.
+ */
+export function isDateFormat(
+  numFmtId: number,
+  code: string | undefined,
+  customCode: boolean = !(numFmtId in BUILTIN_NUM_FMTS),
+): boolean {
   if (isBuiltinDate(numFmtId)) return true;
   // Built-in non-date ids have fixed codes; only custom codes are scanned.
-  if (code === undefined || numFmtId in BUILTIN_NUM_FMTS) return false;
+  if (code === undefined || !customCode) return false;
   return scanFormatCode(code).date;
 }
 
@@ -107,13 +117,11 @@ const GENERAL: CellFormat = Object.freeze({ numFmtId: 0, numFmtCode: 'General', 
 function makeFormat(numFmtId: number, custom: ReadonlyMap<number, string>): CellFormat {
   // Locale-dependent built-ins (5-8, 23-36, 41-44, 50+) have no fixed code: undefined.
   const code: string | undefined = custom.get(numFmtId) ?? BUILTIN_NUM_FMTS[numFmtId];
-  const isCustom = custom.has(numFmtId);
   return {
     numFmtId,
     numFmtCode: code,
     isPercent: isPercentFormat(numFmtId, code),
-    // A workbook may redefine a built-in id; then its own code decides.
-    isDate: isBuiltinDate(numFmtId) || (isCustom && code !== undefined && scanFormatCode(code).date),
+    isDate: isDateFormat(numFmtId, code, custom.has(numFmtId)),
   };
 }
 

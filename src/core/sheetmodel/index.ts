@@ -47,12 +47,14 @@ export {
   formatTarget,
   parseR1C1Cell,
   rebaseFormula,
+  sheetNameResolver,
   shiftCellPart,
   shiftTarget,
   toR1C1,
   tokensToR1C1,
   type Anchor,
   type RebaseResult,
+  type SheetNameResolver,
 } from './r1c1.ts';
 export { expandSharedFormula, markArrayMembers, type SharedFormulaMaster } from './sharedFormulas.ts';
 export { isDateFormat, isPercentFormat, scanFormatCode, BUILTIN_NUM_FMTS } from './styles.ts';

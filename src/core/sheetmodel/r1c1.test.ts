@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellPartToR1C1, formatCellPart, parseR1C1Cell, rebaseFormula, toR1C1 } from './r1c1.ts';
+import { cellPartToR1C1, formatCellPart, parseR1C1Cell, rebaseFormula, sheetNameResolver, toR1C1 } from './r1c1.ts';
 import { tokenize } from './tokenizer.ts';
 
 const at = (row: number, col: number) => ({ row, col });
@@ -26,6 +26,21 @@ describe('toR1C1', () => {
     expect(toR1C1('Data!B2*2', at(2, 3))).toBe("'Data'!RC[-1]*2");
     expect(toR1C1("'Data'!B2*2", at(2, 3))).toBe("'Data'!RC[-1]*2");
     expect(toR1C1("'O''Brien'!A1", at(1, 1))).toBe("'O''Brien'!RC");
+  });
+
+  it('normalises sheet-prefix case to the workbook spelling when given a resolver', () => {
+    // Regression (M1 review #2): 'DATA'! and 'Data'! must give the same R1C1.
+    const resolve = sheetNameResolver(['Data', "O'Brien"]);
+    const expected = "'Data'!RC[-1]*2";
+    expect(toR1C1("'DATA'!B2*2", at(2, 3), resolve)).toBe(expected);
+    expect(toR1C1('data!B2*2', at(2, 3), resolve)).toBe(expected);
+    expect(toR1C1('Data!B2*2', at(2, 3), resolve)).toBe(expected);
+    expect(toR1C1("'o''brien'!A1", at(1, 1), resolve)).toBe("'O''Brien'!RC");
+    expect(toR1C1('SUM(DATA!A:A)', at(1, 1), resolve)).toBe("SUM('Data'!C:C)");
+    expect(toR1C1('DATA!#REF!+DATA!Rate+DATA!Fn(1)', at(1, 1), resolve)).toBe("'Data'!#REF!+'Data'!RATE+'Data'!FN(1)");
+    // Unknown sheets keep their spelling; without a resolver the spelling is kept as written.
+    expect(toR1C1('Other!A1', at(1, 1), resolve)).toBe("'Other'!RC");
+    expect(toR1C1("'DATA'!B2", at(2, 3))).toBe("'DATA'!RC[-1]");
   });
 
   it('upper-cases functions, names and booleans and drops insignificant whitespace', () => {

@@ -84,6 +84,58 @@ describe('readWorkbook: addresses', () => {
   });
 });
 
+describe('readWorkbook: duplicate cell addresses', () => {
+  // Regression (M1 review #1): the earlier cell stayed in the formula/array/shared work lists.
+  it('keeps only the later cell and leaves no ghost formula, array membership or budget use', () => {
+    const bytes = singleSheet(
+      row(1, fml('A1', 'B1*2', 2) + num('A1', 5) + num('B1', 1)) +
+        row(2, '<c r="C2"><f t="array" ref="C2:C3">B1:B2</f><v>1</v></c>' + num('C2', 9)) +
+        row(3, num('C3', 2)),
+    );
+    const model = readWorkbook(bytes);
+    const sheet = model.sheets[0];
+    expect(sheet.cells.get('A1')).toMatchObject({ cachedType: 'n', cachedValue: 5 });
+    expect(sheet.cells.get('A1')?.formula).toBeUndefined();
+    expect(sheet.cells.get('C2')?.formula).toBeUndefined();
+    expect(sheet.cells.get('C3')?.inArray).toBeUndefined();
+    expect(model.coverage.formulaCells).toBe(0);
+    expect(model.coverage.notes.some((n) => n.includes('appears twice'))).toBe(true);
+  });
+
+  it('does not count a replaced formula against the formula cap', () => {
+    const bytes = singleSheet(row(1, fml('A1', 'B1*2', 2) + fml('A1', 'B1*3', 3) + num('B1', 1)));
+    const model = readWorkbook(bytes, { maxFormulaCells: 1 });
+    expect(model.coverage.formulaCells).toBe(1);
+    expect(model.sheets[0].cells.get('A1')).toMatchObject({ formula: 'B1*3', cachedValue: 3 });
+  });
+
+  it('drops a replaced shared-formula master so children cannot expand from a ghost', () => {
+    const bytes = singleSheet(
+      row(1, '<c r="A1"><f t="shared" si="0" ref="A1:A2">B1*2</f><v>2</v></c>' + num('A1', 7) + num('B1', 1)) +
+        row(2, '<c r="A2"><f t="shared" si="0"/><v>4</v></c>' + num('B2', 2)),
+    );
+    const sheet = readWorkbook(bytes).sheets[0];
+    expect(sheet.cells.get('A2')).toMatchObject({ formulaKind: 'shared', opaque: ['unresolved-shared'] });
+    expect(sheet.cells.get('A2')?.formula).toBeUndefined();
+  });
+});
+
+describe('readWorkbook: sheet-prefix case in R1C1', () => {
+  it("gives 'DATA'!B2 and Data!B2 the same R1C1 form (workbook spelling)", () => {
+    const model = readWorkbook(
+      buildXlsx({
+        sheets: [
+          { name: 'Data', rows: row(2, num('B2', 1)) + row(3, num('B3', 2)) },
+          { name: 'Calc', rows: row(1, fml('A1', "'DATA'!B2*2", 2)) + row(2, fml('A2', 'data!B3*2', 4)) },
+        ],
+      }),
+    );
+    const calc = model.sheets[1];
+    expect(calc.cells.get('A1')?.r1c1).toBe("'Data'!R[1]C[1]*2");
+    expect(calc.cells.get('A2')?.r1c1).toBe(calc.cells.get('A1')?.r1c1);
+  });
+});
+
 describe('readWorkbook: styles, percent and date detection', () => {
   const styles = stylesXml({ 164: '0.0%', 165: 'yyyy-mm-dd' }, [0, 9, 14, 164, 165]);
   const sheet = sheetOf(
