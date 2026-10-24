@@ -144,5 +144,15 @@ export function runRulingsStoreContract(label: string, makeStore: () => RulingsS
       await Promise.all(rs.map((r) => store.append(r)));
       expect((await store.listByWorkbook(SHA_A)).map((r) => r.eventId).sort()).toEqual(rs.map((r) => r.eventId).sort());
     });
+
+    it('lists insertion order even when event timestamps are reversed', async () => {
+      const store = await makeStore();
+      const version = await store.registerVersion({ sha256: SHA_A, displayName: 'ordered' });
+      const first = sampleRuling(SHA_A, version.lineageId, { createdAt: '2026-10-24T14:00:00.000Z' });
+      const second = sampleRuling(SHA_A, version.lineageId, { createdAt: '2026-10-24T12:00:00.000Z' });
+      await store.append(first);
+      await store.append(second);
+      expect((await store.listByWorkbook(SHA_A)).map((row) => row.eventId)).toEqual([first.eventId, second.eventId]);
+    });
   });
 }

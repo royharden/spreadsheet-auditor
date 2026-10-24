@@ -25,6 +25,8 @@ export interface Ruling {
   decision: Decision;
   /** Free text; local only, never synced (§2 #1). */
   note?: string;
+  /** Cloud metadata says a note exists, but its text may be available only on the originating device. */
+  hasNote?: boolean;
   noteLocalOnly: boolean;
   /** ISO-8601 timestamp. */
   createdAt: string;
@@ -60,6 +62,7 @@ export function rulingProblems(r: Ruling): string[] {
   if (typeof r.formulaHash !== 'string' || !/^v1:[0-9a-f]{64}$/.test(r.formulaHash)) problems.push('formulaHash is not a v1 SHA-256');
   if (!DECISIONS.includes(r.decision)) problems.push('decision is not confirm/dismiss/by_design');
   if (r.note !== undefined && typeof r.note !== 'string') problems.push('note is not text');
+  if (r.hasNote !== undefined && typeof r.hasNote !== 'boolean') problems.push('hasNote is not boolean');
   if (typeof r.noteLocalOnly !== 'boolean') problems.push('noteLocalOnly is not boolean');
   if (Number.isNaN(Date.parse(r.createdAt))) problems.push('createdAt is not a timestamp');
   return problems;

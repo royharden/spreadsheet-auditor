@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { errorsWorkbook } from '../core/testFixtures.ts';
 import { MAX_COMPRESSED_BYTES } from '../core/sheetmodel/limits.ts';
 import { handleAuditRequest, type AuditRequest, type AuditResponse } from '../worker/protocol.ts';
-import { App } from './App.tsx';
+import type { ComponentProps } from 'react';
+import { App as AuditorApp } from './App.tsx';
+const App = (props: ComponentProps<typeof AuditorApp>) => <AuditorApp authGateway={null} {...props} />;
 
 class FakeWorker {
   onmessage: ((event: MessageEvent<AuditResponse>) => void) | null = null;

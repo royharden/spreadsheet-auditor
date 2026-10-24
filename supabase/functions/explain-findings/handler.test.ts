@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalJson } from './_shared/canonicalJson.ts';
 import { sha256Hex } from './_shared/sha256.ts';
-import { createHandler, ProviderError, type HandlerDependencies, type ServerConfig } from './handler.ts';
+import { createHandler, ProviderError, QuotaError, quotaErrorFromRpc, type HandlerDependencies, type ServerConfig } from './handler.ts';
 
 const unsigned = { findingId: 'aaaaaaaaaaaa', cells: { "'S'!A1": { t: 'n', v: 5 } }, labels: {}, facts: {} };
 const bundle = { ...unsigned, sha256: sha256Hex(canonicalJson(unsigned)) };
@@ -50,12 +50,23 @@ describe('authenticated edge handler order and bounded attempts', () => {
     const seen = new Set<string>();
     const handler = createHandler(dependencies(events, { async reserve(_jwt, requestId) {
       events.push('reserve');
-      if (seen.has(requestId)) throw new Error('duplicate reservation fixture');
+      if (seen.has(requestId)) throw new QuotaError(429);
       seen.add(requestId); return 998;
     } }));
     expect((await handler(post())).status).toBe(200);
     expect((await handler(post())).status).toBe(429);
     expect(events.filter((event) => event === 'provider')).toHaveLength(1);
+  });
+  it('returns 503 for missing quota config or unknown RPC infrastructure failure before any provider call', async () => {
+    for (const failure of [quotaErrorFromRpc({ code: 'P0001', message: 'Quota configuration missing' }), new Error('RPC unavailable')]) {
+      const events: string[] = [];
+      const handler = createHandler(dependencies(events, { async reserve() { events.push('reserve'); throw failure; } }));
+      expect((await handler(post())).status).toBe(503);
+      expect(events).not.toContain('provider');
+    }
+    expect(quotaErrorFromRpc({ code: '23505' }).status).toBe(429);
+    expect(quotaErrorFromRpc({ code: 'P0001', message: 'User quota exceeded' }).status).toBe(429);
+    expect(quotaErrorFromRpc({ code: 'P0001', message: 'Global quota exceeded' }).status).toBe(429);
   });
   it('reserves exactly once while retrying a transient single-attempt transport at most once', async () => {
     const events: string[] = [];
@@ -89,7 +100,7 @@ describe('authenticated edge handler order and bounded attempts', () => {
     const readiness = await handler(new Request('https://edge.invalid/explain-findings', { headers: { authorization: 'Bearer test-caller-jwt', 'content-length': '99999999' } }));
     expect(readiness.status).toBe(200);
     const data = await readiness.json() as { configured: boolean; reasons: string[] };
-    expect(data).toMatchObject({ configured: true, reasons: [] });
+    expect(data).toMatchObject({ configured: true, reasons: [], model: 'fixture-model' });
     expect(JSON.stringify(data)).not.toContain('test-only-provider-key');
     expect(events).toEqual(['auth:test-caller-jwt', 'config']);
     expect((await handler(new Request('https://edge.invalid/explain-findings', { method: 'OPTIONS' }))).status).toBe(204);

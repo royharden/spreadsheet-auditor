@@ -31,6 +31,14 @@ export interface HandlerDependencies {
 export class ProviderError extends Error {
   constructor(readonly retryable: boolean) { super('provider-request-failed'); this.name = 'ProviderError'; }
 }
+export class QuotaError extends Error {
+  constructor(readonly status: 429 | 503) { super('quota-reservation-failed'); this.name = 'QuotaError'; }
+}
+/** Only known cap/replay refusals are quota exhaustion; missing config/infra fail unavailable. */
+export function quotaErrorFromRpc(error: { code?: string; message?: string }): QuotaError {
+  const exhausted = error.code === '23505' || (error.code === 'P0001' && (error.message === 'User quota exceeded' || error.message === 'Global quota exceeded'));
+  return new QuotaError(exhausted ? 429 : 503);
+}
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 function response(status: number, value: unknown): Response {
@@ -91,7 +99,8 @@ export function createHandler(dependencies: HandlerDependencies): (request: Requ
       const arm = new URL(request.url).searchParams.get('arm');
       if (arm !== null && arm !== 'generative' && arm !== 'jev') return response(400, { error: 'invalid-readiness-arm' });
       const readiness = arm === 'jev' ? jev : generative;
-      return response(200, { configured: readiness.configured, reasons: readiness.reasons, arms: { generative: { configured: generative.configured, reasons: generative.reasons }, jev: { configured: jev.configured, reasons: jev.reasons } } });
+      const model = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(readiness.model) ? readiness.model : null;
+      return response(200, { configured: readiness.configured, reasons: readiness.reasons, model, arms: { generative: { configured: generative.configured, reasons: generative.reasons }, jev: { configured: jev.configured, reasons: jev.reasons } } });
     }
     let input: ExplainRequest;
     try { input = parseExplainRequest(await readBoundedBody(request)); } catch (error) {
@@ -101,8 +110,8 @@ export function createHandler(dependencies: HandlerDependencies): (request: Requ
     if (!config.configured) return response(503, { error: 'not-configured', reasons: config.reasons });
     try {
       const remaining = await dependencies.reserve(jwt, input.requestId, input.bundles.length);
-      if (!Number.isSafeInteger(remaining) || remaining < 0) return response(429, { error: 'quota-reservation-failed' });
-    } catch { return response(429, { error: 'quota-reservation-failed' }); }
+      if (!Number.isSafeInteger(remaining) || remaining < 0) return response(503, { error: 'quota-reservation-unavailable' });
+    } catch (error) { return response(error instanceof QuotaError ? error.status : 503, { error: 'quota-reservation-failed' }); }
     const prompt = buildPrompt(input.bundles, input.arm);
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {

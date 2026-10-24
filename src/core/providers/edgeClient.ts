@@ -17,14 +17,14 @@ export function createEdgeProvider(options: EdgeOptions): TriageProvider {
     return parseTriageResponse(value.results);
   } };
 }
-export async function edgeReadiness(options: EdgeOptions): Promise<{ configured: boolean; reasons: string[] }> {
+export async function edgeReadiness(options: EdgeOptions): Promise<{ configured: boolean; reasons: string[]; model?: string | null }> {
   const token = await options.accessToken();
   if (!token) return { configured: false, reasons: ['Sign in before live triage.'] };
   const response = await options.transport(options.url, { method: 'GET', headers: { authorization: `Bearer ${token}` } });
   if (!response.ok) return { configured: false, reasons: [`Readiness HTTP ${response.status}`] };
   const value: unknown = await response.json();
   if (!value || typeof value !== 'object') return { configured: false, reasons: ['Malformed readiness response.'] };
-  const raw = value as { configured?: unknown; reasons?: unknown };
+  const raw = value as { configured?: unknown; reasons?: unknown; model?: unknown };
   if (typeof raw.configured !== 'boolean' || !Array.isArray(raw.reasons) || raw.reasons.some((reason) => typeof reason !== 'string')) return { configured: false, reasons: ['Malformed readiness response.'] };
-  return { configured: raw.configured, reasons: raw.reasons as string[] };
+  return { configured: raw.configured, reasons: raw.reasons as string[], model: typeof raw.model === 'string' ? raw.model : null };
 }

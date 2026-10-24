@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createHandler, type ServerConfig } from './handler.ts';
+import { createHandler, quotaErrorFromRpc, QuotaError, type ServerConfig } from './handler.ts';
 import { createSingleAttemptTransport } from './transport.ts';
 
 function callerClient(jwt: string) {
@@ -25,7 +25,8 @@ Deno.serve(createHandler({
   config,
   async reserve(jwt, requestId, n) {
     const { data, error } = await callerClient(jwt).rpc('reserve_explain_quota', { p_request_id: requestId, p_n: n });
-    if (error || typeof data !== 'number') throw new Error('Quota reservation unavailable.');
+    if (error) throw quotaErrorFromRpc(error);
+    if (typeof data !== 'number') throw new QuotaError(503);
     return data;
   },
   invokeProvider: createSingleAttemptTransport(),

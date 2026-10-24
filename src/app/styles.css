@@ -12,3 +12,16 @@ input { max-width: 100%; font: inherit; }
 .findings li { padding: .5rem; border-bottom: 1px solid #dae2e9; overflow-wrap: anywhere; }
 small { color: #315d46; }
 summary { cursor: pointer; }
+button { font: inherit; padding: .45rem .8rem; margin: .2rem; border: 1px solid #607c8e; border-radius: .3rem; background: #eef3f7; color: inherit; cursor: pointer; }
+button[aria-pressed="true"] { background: #183d58; color: white; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #1976b8; outline-offset: 2px; }
+input:not([type="file"]), textarea { display: block; box-sizing: border-box; font: inherit; width: min(100%, 32rem); padding: .45rem; border: 1px solid #7890a0; border-radius: .25rem; }
+textarea { min-height: 5rem; }
+fieldset { margin-top: 1rem; padding: 1rem; border: 1px solid #b8c7d1; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { border: 1px solid #cbd5df; padding: .45rem; text-align: left; overflow-wrap: anywhere; max-width: 24rem; }
+caption { text-align: left; font-weight: 600; padding-bottom: .5rem; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; }
+.preview { border: 2px solid #1976b8; }
