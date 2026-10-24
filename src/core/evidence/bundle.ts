@@ -15,8 +15,9 @@ import { isValidCol, isValidRow, parseA1, splitCellRef, toCellRef, type CellRef 
 import { canonicalJson, utf8ByteLength } from '../util/canonicalJson.ts';
 import { sha256Hex } from '../util/sha256.ts';
 import { sanitizeText, sanitizeValue } from './sanitize.ts';
+import { MAX_BUNDLE_BYTES } from '../explain/limits.ts';
 
-export const BUNDLE_MAX_BYTES = 2048;
+export const BUNDLE_MAX_BYTES = MAX_BUNDLE_BYTES;
 export const MAX_NEIGHBOURS_PER_SIDE = 4;
 /** How far labels are searched (cells above for the column label, left for the row label). */
 export const LABEL_SCAN_LIMIT = 200;

@@ -16,6 +16,24 @@ function row(workbook: string, cell: string, rule: RuleId, truth: 'defect' | 'by
 function complete(value: ReturnType<typeof buildSystemResult>): CompleteResult { if (value.status !== 'complete') throw new Error('Expected completed fixture.'); return value; }
 
 describe('complete report accounting and honest unavailable systems', () => {
+  it('requires every predeclared Jev comparison term and every comparator', () => {
+    const measured = (system: '1' | '2' | '3', fp: number, defects = 0, commonReview = 0): CompleteResult => {
+      const result = complete(buildSystemResult(system, system === '1' ? 'template' : 'recorded-live', [], [], []));
+      result.surfaced.micro.fp = fp;
+      result.setAsideDefects = Array.from({ length: defects }, () => ({ workbook: 'fixture.xlsx', sheet: 'S', cell: 'A1', ruleId: 'MIXED_UNITS', kind: 'set-aside-defect', stage: 'set-aside' }));
+      result.setAsideCommonReviewDefects = commonReview;
+      return result;
+    };
+    const rules = measured('1', 3);
+    const generative = measured('2', 0, 1, 1);
+    const jev = measured('3', 2);
+    expect(jevDisposition([rules, generative, jev], 0)).toBe('won');
+    expect(jevDisposition([rules, generative, measured('3', 3)], 0)).toBe('lost');
+    expect(jevDisposition([rules, generative, measured('3', 2, 1)], 0)).toBe('lost');
+    expect(jevDisposition([rules, generative, measured('3', 2, 2, 2)], 2)).toBe('lost');
+    expect(jevDisposition([rules, generative, measured('3', 2, 2, 1)], 2)).toBe('won');
+    for (const missing of ['1', '2', '3']) expect(jevDisposition([rules, generative, jev].filter((result) => result.system !== missing), 0)).toBe('not-evaluated');
+  });
   it('retains raw versus surfaced metrics, named set-aside defects, benign counts and paired deltas', () => {
     const manifest = [row('clean.xlsx', 'A1', 'MIXED_UNITS', 'defect'), row('clean.xlsx', 'A2', 'CONSTANT_PLUG', 'by_design'), row('injected.xlsx', 'A1', 'MIXED_UNITS', 'defect'), row('injected.xlsx', 'A2', 'CONSTANT_PLUG', 'by_design')];
     const cleanFindings = [finding('MIXED_UNITS', 'A1'), finding('CONSTANT_PLUG', 'A2')];
