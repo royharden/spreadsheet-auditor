@@ -1,0 +1,4 @@
+[functions.explain-findings]
+verify_jwt = true
+import_map = "./functions/explain-findings/import_map.json"
+entrypoint = "./functions/explain-findings/index.ts"

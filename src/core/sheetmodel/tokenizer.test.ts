@@ -110,6 +110,25 @@ describe('tokenize: references and anchors', () => {
   it('reads sheet-scoped names', () => {
     expect(only('Sheet1!LocalRate')).toMatchObject({ kind: 'name', sheet: 'Sheet1', name: 'LocalRate' });
   });
+
+  it('reads a sheet- or book-qualified name followed by ( as a function call', () => {
+    // Regression (M1 review #4): these were name/opaque tokens followed by a paren.
+    expect(kinds('Sheet1!MyFn(A1)')).toEqual(['func', 'paren', 'ref', 'paren']);
+    expect(tokenize('Sheet1!MyFn(A1)')[0]).toMatchObject({
+      kind: 'func',
+      name: 'MYFN',
+      text: 'Sheet1!MyFn',
+      prefix: 'Sheet1!',
+      sheet: 'Sheet1',
+    });
+    expect(tokenize("'My Sheet'!calc(2)")[0]).toMatchObject({ kind: 'func', name: 'CALC', sheet: 'My Sheet' });
+    const ext = tokenize('[1]!Rate(B2)');
+    expect(ext[0]).toMatchObject({ kind: 'func', name: 'RATE', book: '1', prefix: '[1]!' });
+    expect(opaqueCategories(ext)).toEqual(['external-ref']);
+    // Without a paren they stay names (and a book-qualified name stays opaque).
+    expect(only('[2]!GlobalName')).toMatchObject({ kind: 'opaque', category: 'external-ref' });
+    for (const t of tokenize('Sheet1!MyFn(A1)+[1]!Rate(B2)')) expect('Sheet1!MyFn(A1)+[1]!Rate(B2)'.slice(t.start, t.end)).toBe(t.text);
+  });
 });
 
 describe('tokenize: errors and string-literal immunity', () => {

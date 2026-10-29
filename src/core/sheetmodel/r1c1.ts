@@ -62,28 +62,48 @@ export function parseR1C1Cell(text: string, anchor: Anchor): CellPart | null {
   return { row, col, rowAbs: absRow !== undefined, colAbs: absCol !== undefined };
 }
 
-function plainPrefix(sheet: string | undefined): string {
-  return sheet === undefined ? '' : `${quoteSheetName(sheet)}!`;
+/** Maps a sheet name as written in a formula to the workbook's own spelling. */
+export type SheetNameResolver = (name: string) => string;
+
+/**
+ * Case-insensitive resolver over the workbook's sheet names (Excel compares sheet names
+ * case-insensitively, so `'DATA'!A1` and `Data!A1` are the same reference). Names that are not
+ * sheets of the workbook are returned as written.
+ */
+export function sheetNameResolver(names: readonly string[]): SheetNameResolver {
+  const byKey = new Map<string, string>();
+  for (const n of names) {
+    const key = n.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, n);
+  }
+  return (name) => byKey.get(name.toLowerCase()) ?? name;
 }
 
-function tokenR1C1(t: Token, anchor: Anchor): string {
+function plainPrefix(sheet: string | undefined, resolve: SheetNameResolver | undefined): string {
+  if (sheet === undefined) return '';
+  return `${quoteSheetName(resolve ? resolve(sheet) : sheet)}!`;
+}
+
+function tokenR1C1(t: Token, anchor: Anchor, resolve: SheetNameResolver | undefined): string {
   switch (t.kind) {
     case 'ref':
-      return plainPrefix(t.sheet) + cellPartToR1C1(t.cell, anchor);
+      return plainPrefix(t.sheet, resolve) + cellPartToR1C1(t.cell, anchor);
     case 'range':
-      return `${plainPrefix(t.sheet)}${cellPartToR1C1(t.from, anchor)}:${cellPartToR1C1(t.to, anchor)}`;
+      return `${plainPrefix(t.sheet, resolve)}${cellPartToR1C1(t.from, anchor)}:${cellPartToR1C1(t.to, anchor)}`;
     case 'opaque':
       if (t.target) {
-        const pre = t.category === 'whole-column' || t.category === 'whole-row' ? plainPrefix(t.sheet) : t.prefix;
+        const pre = t.category === 'whole-column' || t.category === 'whole-row' ? plainPrefix(t.sheet, resolve) : t.prefix;
         return pre + targetToR1C1(t.target, anchor);
       }
       return t.text;
     case 'name':
-      return plainPrefix(t.sheet) + t.name.toUpperCase();
+      return plainPrefix(t.sheet, resolve) + t.name.toUpperCase();
     case 'err':
-      return plainPrefix(t.sheet) + t.value;
+      return plainPrefix(t.sheet, resolve) + t.value;
     case 'func':
-      return t.name;
+      // Book-qualified calls keep their raw prefix (another workbook's names are not ours).
+      if (t.book !== undefined) return (t.prefix ?? '') + t.name;
+      return plainPrefix(t.sheet, resolve) + t.name;
     case 'bool':
       return t.value ? 'TRUE' : 'FALSE';
     case 'num':
@@ -97,16 +117,20 @@ function tokenR1C1(t: Token, anchor: Anchor): string {
   }
 }
 
-/** R1C1 form of already-tokenized formula text, relative to the cell that holds it. */
-export function tokensToR1C1(tokens: readonly Token[], anchor: Anchor): string {
+/**
+ * R1C1 form of already-tokenized formula text, relative to the cell that holds it. With
+ * `resolveSheet` (the reader passes one built from the workbook's sheet names), sheet prefixes
+ * use the workbook's own spelling, so prefixes differing only in case give the same R1C1.
+ */
+export function tokensToR1C1(tokens: readonly Token[], anchor: Anchor, resolveSheet?: SheetNameResolver): string {
   let out = '';
-  for (const t of tokens) out += tokenR1C1(t, anchor);
+  for (const t of tokens) out += tokenR1C1(t, anchor, resolveSheet);
   return out;
 }
 
 /** R1C1 form of formula text (no `=` in the output), relative to the cell that holds it. */
-export function toR1C1(formula: string, anchor: Anchor): string {
-  return tokensToR1C1(tokenize(formula), anchor);
+export function toR1C1(formula: string, anchor: Anchor, resolveSheet?: SheetNameResolver): string {
+  return tokensToR1C1(tokenize(formula), anchor, resolveSheet);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -23,3 +23,13 @@ supabase/.branches/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# Keep local credentials, private keys, and generated archives out of Git
+.creds/
+ArchiveManager-creds.txt
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+.cache/

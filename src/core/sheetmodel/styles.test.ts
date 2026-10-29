@@ -63,6 +63,22 @@ describe('parseStyles', () => {
     expect(styles.cellFormat(7)).toMatchObject({ numFmtId: 10, isPercent: true });
   });
 
+  it('lets a workbook redefine a built-in id, and isDateFormat agrees with cellFormat (one shared rule)', () => {
+    // Regression (M1 review #3): cellFormat and the exported isDateFormat used separate logic.
+    const custom: Record<number, string> = { 2: 'yyyy-mm-dd', 164: 'dd/mm/yyyy', 165: '0.0%', 9: '0%' };
+    const ids = [0, 2, 9, 14, 30, 47, 164, 165];
+    const s = parseStyles(parseXmlText(stylesXml(custom, ids), 'xl/styles.xml'));
+    expect(s.cellFormat(1)).toMatchObject({ numFmtId: 2, numFmtCode: 'yyyy-mm-dd', isDate: true });
+    ids.forEach((id, styleId) => {
+      const f = s.cellFormat(styleId);
+      const expected = isDateFormat(id, f.numFmtCode, id in custom);
+      expect(f.isDate, `numFmtId ${id}`).toBe(expected);
+    });
+    // Without the custom flag, a fixed built-in id is never re-scanned.
+    expect(isDateFormat(2, 'yyyy-mm-dd')).toBe(false);
+    expect(isDateFormat(2, 'yyyy-mm-dd', true)).toBe(true);
+  });
+
   it('falls back to General for missing or out-of-range style ids', () => {
     expect(styles.cellFormat(undefined)).toMatchObject({ numFmtId: 0 });
     expect(styles.cellFormat(99)).toMatchObject({ numFmtId: 0, isPercent: false, isDate: false });

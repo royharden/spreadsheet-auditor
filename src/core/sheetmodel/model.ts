@@ -18,6 +18,7 @@ import {
   relsPartFor,
   type Relationship,
 } from './parts.ts';
+import { sheetNameResolver } from './r1c1.ts';
 import { parseSharedStrings } from './sharedStrings.ts';
 import { parseStyles } from './styles.ts';
 import type { Cell, DefinedName, OpaqueEntry, Sheet, WorkbookModel } from './types.ts';
@@ -77,6 +78,7 @@ export function readWorkbook(bytes: Uint8Array, limits?: Partial<Limits>, option
   const opaque: OpaqueEntry[] = [];
   const budget: FormulaBudget = { count: 0, max: lim.maxFormulaCells };
   const sheets: Sheet[] = [];
+  const resolveSheet = sheetNameResolver(wb.sheets.map((s) => s.name));
 
   wb.sheets.forEach((entry, index) => {
     const rel = entry.relId !== undefined ? relById.get(entry.relId) : undefined;
@@ -94,6 +96,7 @@ export function readWorkbook(bytes: Uint8Array, limits?: Partial<Limits>, option
       sharedStrings,
       styles,
       formulaBudget: budget,
+      resolveSheet,
     });
     notes.push(...parsed.notes);
     opaque.push(...parsed.opaque);

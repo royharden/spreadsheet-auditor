@@ -9,7 +9,7 @@ import { expandSharedFormula, markArrayMembers, type SharedFormulaMaster } from 
 import { richText } from './sharedStrings.ts';
 import type { Styles } from './styles.ts';
 import { opaqueCategories, tokenize } from './tokenizer.ts';
-import { tokensToR1C1 } from './r1c1.ts';
+import { tokensToR1C1, type SheetNameResolver } from './r1c1.ts';
 import type { CachedType, CachedValue, Cell, CellOpaqueCategory, OpaqueEntry } from './types.ts';
 import { attr, child, children, decodeOoxmlEscapes, textOf, type XNode } from './xml.ts';
 
@@ -24,6 +24,8 @@ export interface WorksheetContext {
   readonly sharedStrings: readonly string[];
   readonly styles: Styles;
   readonly formulaBudget: FormulaBudget;
+  /** Maps formula sheet prefixes to the workbook's own sheet-name spelling (R1C1 form). */
+  readonly resolveSheet?: SheetNameResolver;
 }
 
 export interface ParsedWorksheet {
@@ -108,6 +110,23 @@ export function parseWorksheet(doc: XNode, ctx: WorksheetContext): ParsedWorkshe
   const arrays: Cell[] = [];
   const formulaCells: Cell[] = [];
 
+  // A repeated cell address: the later cell wins, so the earlier one must leave every work list
+  // (formula count and budget, shared children, shared masters, arrays) or it would be a ghost.
+  const forget = (prev: Cell): void => {
+    const removeFrom = <T>(list: T[], match: (item: T) => boolean): boolean => {
+      const i = list.findIndex(match);
+      if (i < 0) return false;
+      list.splice(i, 1);
+      return true;
+    };
+    if (removeFrom(formulaCells, (c) => c === prev)) ctx.formulaBudget.count--;
+    removeFrom(arrays, (c) => c === prev);
+    removeFrom(sharedChildren, (s) => s.cell === prev);
+    for (const [si, m] of masters) {
+      if (m.row === prev.row && m.col === prev.col) masters.delete(si);
+    }
+  };
+
   let rowCursor = 0;
   for (const rowNode of children(child(ws, 'sheetData'), 'row')) {
     const rAttr = attr(rowNode, 'r');
@@ -145,6 +164,11 @@ export function parseWorksheet(doc: XNode, ctx: WorksheetContext): ParsedWorkshe
       const styleId = sAttr !== undefined && /^\d+$/.test(sAttr) ? Number(sAttr) : undefined;
       const fmt = ctx.styles.cellFormat(styleId);
       const addr = toA1(row, col);
+      const previous = cells.get(addr);
+      if (previous) {
+        noteOnce('dup-cell', `Sheet "${ctx.sheetName}": a cell address appears twice; the later one is used.`);
+        forget(previous);
+      }
       const cell: Cell = {
         addr,
         row,
@@ -195,9 +219,6 @@ export function parseWorksheet(doc: XNode, ctx: WorksheetContext): ParsedWorkshe
         formulaCells.push(cell);
       }
 
-      if (cells.has(addr)) {
-        noteOnce('dup-cell', `Sheet "${ctx.sheetName}": a cell address appears twice; the later one is used.`);
-      }
       cells.set(addr, cell);
     }
   }
@@ -240,7 +261,7 @@ export function parseWorksheet(doc: XNode, ctx: WorksheetContext): ParsedWorkshe
       for (const cat of opaqueCategories(tokens)) {
         if (!cats.includes(cat)) cats.push(cat);
       }
-      cell.r1c1 = tokensToR1C1(tokens, cell);
+      cell.r1c1 = tokensToR1C1(tokens, cell, ctx.resolveSheet);
     }
     if (cats.length > 0) {
       cell.opaque = cats;

@@ -99,8 +99,14 @@ export interface RangeToken extends Span, Qualified {
 
 export interface FuncToken extends Span {
   kind: 'func';
-  /** Upper-cased function name, including any `_xlfn.` prefix. */
+  /** Upper-cased function name, including any `_xlfn.` prefix (never the sheet/book prefix). */
   name: string;
+  /** Raw qualifier including `!` for `Sheet1!MyFn(` / `[1]!MyFn(`; absent when unqualified. */
+  prefix?: string;
+  /** Sheet qualifier (unquoted, unescaped), e.g. a sheet-scoped LAMBDA name. */
+  sheet?: string;
+  /** External workbook qualifier: the function lives in another workbook (opaque external-ref). */
+  book?: string;
 }
 
 export interface NameToken extends Span, Qualified {
@@ -367,6 +373,14 @@ function prefixedToken(src: string, start: number, pre: Prefix, addr: AddressMat
   const end = addr.end;
   const text = src.slice(start, end);
   const prefix = src.slice(start, pre.end);
+  // A qualified name directly followed by `(` is a call (`Sheet1!MyFn(`, `[1]!MyFn(`), as for
+  // unqualified names. 3-D qualifiers never name a function and stay opaque below.
+  if (addr.type === 'name' && src[end] === '(' && pre.sheetEnd === undefined) {
+    const fn: FuncToken = { kind: 'func', text, start, end, name: addr.name.toUpperCase(), prefix };
+    if (pre.sheet !== undefined) fn.sheet = pre.sheet;
+    if (pre.book !== undefined) fn.book = pre.book;
+    return fn;
+  }
   const category: OpaqueCategory | undefined =
     pre.book !== undefined ? 'external-ref' : pre.sheetEnd !== undefined ? '3d-ref' : undefined;
   if (category !== undefined) {
@@ -600,11 +614,15 @@ export function tokenize(formula: string): Token[] {
   return tokens;
 }
 
-/** Distinct opaque categories present in a token list (excluding none). */
+/**
+ * Distinct opaque categories present in a token list (excluding none). A call to a function
+ * in another workbook (`[1]!MyFn(`) counts as `external-ref`: its result cannot be analysed.
+ */
 export function opaqueCategories(tokens: readonly Token[]): OpaqueCategory[] {
   const out: OpaqueCategory[] = [];
   for (const t of tokens) {
-    if (t.kind === 'opaque' && !out.includes(t.category)) out.push(t.category);
+    const category = t.kind === 'opaque' ? t.category : t.kind === 'func' && t.book !== undefined ? 'external-ref' : undefined;
+    if (category !== undefined && !out.includes(category)) out.push(category);
   }
   return out;
 }
